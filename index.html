@@ -79,15 +79,20 @@
     letter-spacing: 0.04em;
   }
 
+  /* block cursor, exactly one character wide, like a terminal input line */
   .cur {
     display: inline-block;
-    width: 0.55em;
-    height: 0.9em;
-    margin-left: 0.12em;
+    width: 1ch;
+    height: 0.95em;
     background: var(--amber);
-    vertical-align: -0.04em;
-    animation: blink 1s steps(1) infinite;
+    box-shadow: 0 0 8px rgba(255, 176, 0, 0.35);
+    vertical-align: -0.1em;
+    animation: blink 1.06s step-end infinite;
   }
+
+  /* with JS the cursor stays solid while the title is typed, then starts blinking */
+  .js .cur { animation: none; }
+  .js .cur.blink { animation: blink 1.06s step-end infinite; }
 
   @keyframes blink { 50% { opacity: 0; } }
 
@@ -112,7 +117,8 @@
 
   .out { margin: 6px 0 0; }
   .out p { margin: 0 0 2px; }
-  .out .k { display: inline-block; min-width: 9ch; color: var(--amber); }
+  .out .k { display: inline-block; min-width: 9ch; text-indent: 0; color: var(--amber); }
+  .out .row { padding-left: 10ch; text-indent: -10ch; }
 
   .btn {
     display: block;
@@ -156,7 +162,7 @@
   footer p { margin-bottom: 4px; }
 
   @media (prefers-reduced-motion: reduce) {
-    .cur { animation: none; }
+    .cur, .js .cur.blink { animation: none; }
   }
 </style>
 </head>
@@ -168,7 +174,7 @@
     <span>Chancery</span>
   </div>
 
-  <h1>ADM-0<span class="cur" aria-hidden="true"></span></h1>
+  <h1><span id="title">ADM-0</span><span class="cur" aria-hidden="true"></span></h1>
   <p class="sub">Verification Bureau</p>
 
   <p class="line" data-type>CASE FILE: ADM-0</p>
@@ -188,30 +194,30 @@
   <section>
     <p class="prompt">list</p>
     <div class="out">
-      <p><span class="k">search</span> The open web is your archive.</p>
-      <p><span class="k">files</span> Read, compare and decode what the Bureau sends.</p>
-      <p><span class="k">hidden</span> Some documents hold more than they show.</p>
-      <p><span class="k">signals</span> Listen closely. Not every voice is genuine.</p>
-      <p><span class="k">mail</span> Some answers arrive by real email.</p>
+      <p class="row"><span class="k">search</span> The open web is your archive.</p>
+      <p class="row"><span class="k">files</span> Read, compare and decode what the Bureau sends.</p>
+      <p class="row"><span class="k">hidden</span> Some documents hold more than they show.</p>
+      <p class="row"><span class="k">signals</span> Listen closely. Not every voice is genuine.</p>
+      <p class="row"><span class="k">mail</span> Some answers arrive by real email.</p>
     </div>
   </section>
 
   <section>
     <p class="prompt">status</p>
     <div class="out">
-      <p><span class="k">platform</span> Android</p>
-      <p><span class="k">language</span> English</p>
-      <p><span class="k">demo</span> ADM-0/5, the first five cases</p>
+      <p class="row"><span class="k">platform</span> Android</p>
+      <p class="row"><span class="k">language</span> English</p>
+      <p class="row"><span class="k">demo</span> ADM-0/5, the first five cases</p>
     </div>
   </section>
 
   <section>
     <p class="prompt">install</p>
-    <a class="btn" href="https://play.google.com/store/apps/details?id=com.example.adm0">
+    <a class="btn" href="https://play.google.com/store/apps/details?id=com.artcore.ADM0">
       [ GET ADM-0 ON GOOGLE PLAY ]
       <small>Full edition</small>
     </a>
-    <a class="btn" href="https://play.google.com/store/apps/details?id=com.example.adm0.demo">
+    <a class="btn" href="https://play.google.com/store/apps/details?id=com.artcore.ADM0_DEMO">
       [ GET ADM-0/5 ON GOOGLE PLAY ]
       <small>Demo: the first five cases</small>
     </a>
@@ -231,13 +237,29 @@
 
 <script>
 (function () {
+  var cursor = document.querySelector(".cur");
+  var title = document.getElementById("title");
   var items = document.querySelectorAll("[data-type]");
-  if (!items.length) { return; }
 
   var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   if (reduce) {
     for (var i = 0; i < items.length; i++) { items[i].style.visibility = "visible"; }
     return;
+  }
+
+  function typeInto(node, text, delay, done) {
+    var pos = 0;
+    node.textContent = "";
+    node.style.visibility = "visible";
+    (function tick() {
+      if (pos < text.length) {
+        node.textContent += text.charAt(pos);
+        pos += 1;
+        setTimeout(tick, delay);
+      } else if (done) {
+        done();
+      }
+    })();
   }
 
   var texts = [];
@@ -246,25 +268,23 @@
     items[j].textContent = "";
   }
 
-  var line = 0;
-  var pos = 0;
-
-  function step() {
-    if (line >= items.length) { return; }
-    var node = items[line];
-    node.style.visibility = "visible";
-    if (pos < texts[line].length) {
-      node.textContent += texts[line].charAt(pos);
-      pos += 1;
-      setTimeout(step, 28);
-    } else {
-      line += 1;
-      pos = 0;
-      setTimeout(step, 220);
-    }
+  function typeLines(index) {
+    if (index >= items.length) { return; }
+    typeInto(items[index], texts[index], 28, function () {
+      setTimeout(function () { typeLines(index + 1); }, 220);
+    });
   }
 
-  setTimeout(step, 350);
+  var titleText = title.textContent;
+  title.textContent = "";
+
+  // the cursor stays solid while the title is typed, then blinks like a real input cursor
+  setTimeout(function () {
+    typeInto(title, titleText, 140, function () {
+      if (cursor) { cursor.className = "cur blink"; }
+      setTimeout(function () { typeLines(0); }, 500);
+    });
+  }, 400);
 })();
 </script>
 </body>
